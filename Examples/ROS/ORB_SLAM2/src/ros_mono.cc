@@ -29,10 +29,12 @@
 
 // ORB_SLAM2
 #include "../../../include/System.h"
+#include"../../../include/Converter.h"
 
 // ROS
 #include <ros/ros.h>
 #include <cv_bridge/cv_bridge.h>
+
 
 // Tf2
 #include <tf2/LinearMath/Transform.h>
@@ -128,7 +130,7 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
     }
 
     //
-    cv::Mat camera_pose_mat=mpSLAM->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec());
+    cv::Mat camera_pose_mat=mpSLAM->TrackMonocular(cv_ptr->image,cv_ptr->header.stamp.toSec()).clone();
     
     
     // Check
