@@ -33,8 +33,12 @@
 
 // ROS
 #include <ros/ros.h>
+
+//
 #include <cv_bridge/cv_bridge.h>
 
+//
+#include <geometry_msgs/PoseStamped.h>
 
 // Tf2
 #include <tf2/LinearMath/Transform.h>
@@ -43,13 +47,14 @@
 
 
 
-using namespace std;
+//using namespace std;
 
 
 std::string parent_name;
 std::string child_name;
 
 tf2_ros::TransformBroadcaster* tf_transform_broadcaster;
+ros::Publisher camera_pose_pub;
 
 
 class ImageGrabber
@@ -69,7 +74,7 @@ int main(int argc, char **argv)
     
     if(argc != 3)
     {
-        cerr << endl << "Usage: rosrun ORB_SLAM2 Mono path_to_vocabulary path_to_settings" << endl;        
+        std::cerr << std::endl << "Usage: rosrun ORB_SLAM2 Mono path_to_vocabulary path_to_settings" << std::endl;
         ros::shutdown();
         return 1;
     }    
@@ -90,10 +95,14 @@ int main(int argc, char **argv)
 
 
     ros::NodeHandle nodeHandler;
+
+    // Subscriber
     ros::Subscriber sub = nodeHandler.subscribe("/camera/image_raw", 1, &ImageGrabber::GrabImage,&igb);
 
+    // Publisher
+    camera_pose_pub = nodeHandler.advertise<geometry_msgs::PoseStamped>("camera_pose", 1, true);
 
-    //
+    // TF transform broadcaster
     tf_transform_broadcaster=new tf2_ros::TransformBroadcaster();
 
     //
@@ -103,7 +112,7 @@ int main(int argc, char **argv)
     SLAM.Shutdown();
 
     // Save camera trajectory
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
+    //SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
     
     //
     if(tf_transform_broadcaster)
@@ -142,6 +151,12 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
     
     // Current Time Stamp
     ros::Time curr_stamp = msg->header.stamp;
+
+    // Header
+    std_msgs::Header camera_pose_header;
+
+    camera_pose_header.stamp=curr_stamp;
+    camera_pose_header.frame_id=parent_name;
     
     
     // Tf transform
@@ -151,25 +166,39 @@ void ImageGrabber::GrabImage(const sensor_msgs::ImageConstPtr& msg)
 
     tf2::Vector3 tf_orig(camera_pose_mat.at<float>(0,3), camera_pose_mat.at<float>(1,3), camera_pose_mat.at<float>(2,3));
 
-    tf2::Transform tf2_transform=tf2::Transform(tf_rot, tf_orig);
+    tf2::Transform camera_pose_tf2_transform=tf2::Transform(tf_rot, tf_orig);
 
-    geometry_msgs::Transform transform=tf2::toMsg(tf2_transform);
-    
-    
-    // TF
-    geometry_msgs::TransformStamped transform_stamped;
-
-    // Header
-    transform_stamped.header.stamp=curr_stamp;
-    transform_stamped.header.frame_id=parent_name;
-    // Child frame id
-    transform_stamped.child_frame_id=child_name;
     // Transform
-    transform_stamped.transform = transform;
-    // Publish
-    tf_transform_broadcaster->sendTransform(transform_stamped);
+    geometry_msgs::Transform camera_pose_transform=tf2::toMsg(camera_pose_tf2_transform);
+    //
+    geometry_msgs::TransformStamped camera_pose_transform_stamped;
+    // Header
+    camera_pose_transform_stamped.header=camera_pose_header;
+    // Child frame id
+    camera_pose_transform_stamped.child_frame_id=child_name;
+    // Transform
+    camera_pose_transform_stamped.transform = camera_pose_transform;
     
     
+    // Msg pose stamped
+    geometry_msgs::Pose camera_pose_msg;
+    tf2::toMsg(camera_pose_tf2_transform, camera_pose_msg);
+    //
+    geometry_msgs::PoseStamped camera_pose_stamped_msg;
+
+    //
+    camera_pose_stamped_msg.header=camera_pose_header;
+    //
+    camera_pose_stamped_msg.pose=camera_pose_msg;
+
+
+    // Publish tf
+    tf_transform_broadcaster->sendTransform(camera_pose_transform_stamped);
+
+    // Publish pose stamped
+    camera_pose_pub.publish(camera_pose_stamped_msg);
+
+
     //
     return;
 }
